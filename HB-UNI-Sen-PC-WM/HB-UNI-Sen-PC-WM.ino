@@ -27,6 +27,7 @@
 #define TFT_RST            30 //PC2
 #define TFT_DC             31 //PC3
 #define TFT_LED            32 //PC4
+
 #define TFT_BACKLIGHT_TIME 30
 #define DISPLAY_BGCOLOR    ST77XX_BLACK
 #define DISPLAY_ROTATE     3 // 0 = 0° , 1 = 90°, 2 = 180°, 3 = 270°
@@ -186,20 +187,21 @@ public:
 };
 TFTDisplay Display;
 
-DEFREGISTER(UReg0, MASTERID_REGS, 0x20, 0x21)
+DEFREGISTER(UReg0, MASTERID_REGS, 0x20, 0x21, DREG_CYCLICINFOMSGDIS)
 class UList0 : public RegList0<UReg0> {
   public:
     UList0 (uint16_t addr) : RegList0<UReg0>(addr) {}
     virtual ~UList0 () {}
 
-    bool Sendeintervall (uint16_t value) const { return this->writeRegister(0x20, (value >> 8) & 0xff) && this->writeRegister(0x21, value & 0xff); }
-    uint16_t Sendeintervall () const { return (this->readRegister(0x20, 0) << 8) + this->readRegister(0x21, 0); }
+    bool txInterval (uint16_t value) const { return this->writeRegister(0x20, (value >> 8) & 0xff) && this->writeRegister(0x21, value & 0xff); }
+    uint16_t txInterval () const { return (this->readRegister(0x20, 0) << 8) + this->readRegister(0x21, 0); }
 
     void defaults () {
       clear();
       fram.clear();
       fram.write4ByteValueToFRAM(0, FRAM_VALUE_ADDRESS);
-      Sendeintervall(180);
+      txInterval(180);
+      cyclicInfoMsgDis(0);
     }
 };
 
@@ -260,7 +262,9 @@ class MeasureEventMsg : public Message {
 
 class MeasureChannel : public Channel<Hal, UList1, EmptyList, List4, PEERS_PER_CHANNEL, UList0>, public Alarm {
     MeasureEventMsg msg;
+    uint8_t         dismissCount;
     uint32_t        value;
+    uint32_t        lastValue;
     uint32_t        initValue;
     OAPC_I2C<>      oapc;
     uint16_t        trg_count;
@@ -270,7 +274,7 @@ class MeasureChannel : public Channel<Hal, UList1, EmptyList, List4, PEERS_PER_C
     bool            framError;
 
   public:
-    MeasureChannel () : Channel(), Alarm(0), value(0), initValue(0), trg_count(0), literPerPulse(0), calibrationMode(false), oapcError(false), framError(false) {}
+    MeasureChannel () : Channel(), Alarm(0), dismissCount(0), value(0), lastValue(0), initValue(0), trg_count(0), literPerPulse(0), calibrationMode(false), oapcError(false), framError(false) {}
     virtual ~MeasureChannel () {}
 
     void setCountValue(uint32_t val) {
@@ -301,21 +305,29 @@ class MeasureChannel : public Channel<Hal, UList1, EmptyList, List4, PEERS_PER_C
 
         if (oapcCountValue < 0xFFFF) {
           value += (literPerPulse * oapcCountValue);
+          fram.write4ByteValueToFRAM(value, FRAM_VALUE_ADDRESS);
         } else {
           oapcError = true;
           this->changed(true);
         }
 
-        fram.write4ByteValueToFRAM(value, FRAM_VALUE_ADDRESS);
-
         Display.showCountValues(value, initValue);
 
-        if ( trg_count >= max(10, device().getList0().Sendeintervall()) / MEASURE_INTERVAL ) {
+        if ( trg_count >= max(10, device().getList0().txInterval()) / MEASURE_INTERVAL ) {
 
-          msg.init(device().nextcount(), value + initValue);
-          device().broadcastEvent(msg);
+          uint32_t valueToSend = value + initValue;
+
+          uint8_t cyclicInfoMsgDis = device().getList0().cyclicInfoMsgDis();
+
+          if (valueToSend == lastValue) dismissCount++;
+
+          if (valueToSend != lastValue || dismissCount > cyclicInfoMsgDis) {
+            msg.init(device().nextcount(), valueToSend);
+            device().broadcastEvent(msg);
+          }
 
           trg_count = 0;
+          lastValue = valueToSend;
         }
 
         DPRINT("value=");DDEC(value);DPRINT(", initValue = ");DDECLN(initValue);
@@ -396,7 +408,7 @@ class UType : public MultiChannelDevice<Hal, MeasureChannel, 1, UList0> {
 
     virtual void configChanged () {
       TSDevice::configChanged();
-      DPRINT(F("*Sendeintervall: ")); DDECLN(this->getList0().Sendeintervall());
+      DPRINT(F("*txInterval: ")); DDECLN(this->getList0().txInterval());
     }
 };
 
