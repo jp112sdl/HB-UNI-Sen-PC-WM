@@ -205,11 +205,14 @@ class UList0 : public RegList0<UReg0> {
     }
 };
 
-DEFREGISTER(UReg1, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14)
+DEFREGISTER(UReg1, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14)
 class UList1 : public RegList1<UReg1> {
   public:
     UList1 (uint16_t addr) : RegList1<UReg1>(addr) {}
     virtual ~UList1 () {}
+
+    bool changeMode (uint8_t value) const { return this->writeRegister(0x08, value & 0xff); }
+    uint8_t changeMode () const { return this->readRegister(0x08, 0); }
 
     bool literPerPulse (uint16_t value) const { return this->writeRegister(0x09, (value >> 8) & 0xff) && this->writeRegister(0x0a, value & 0xff); }
     uint16_t literPerPulse () const { return (this->readRegister(0x09, 0) << 8) + this->readRegister(0x0a, 0); }
@@ -243,6 +246,7 @@ class UList1 : public RegList1<UReg1> {
 
    void defaults () {
       clear();
+      changeMode(RISING);
       literPerPulse(1);
       oapcAnalogLowThreshold(300);
       oapcAnalogHighThreshold(900);
@@ -261,20 +265,20 @@ class MeasureEventMsg : public Message {
 };
 
 class MeasureChannel : public Channel<Hal, UList1, EmptyList, List4, PEERS_PER_CHANNEL, UList0>, public Alarm {
-    MeasureEventMsg msg;
-    uint8_t         dismissCount;
-    uint32_t        value;
-    uint32_t        lastValue;
-    uint32_t        initValue;
-    OAPC_I2C<>      oapc;
-    uint16_t        trg_count;
-    uint16_t        literPerPulse;
     bool            calibrationMode;
     bool            oapcError;
     bool            framError;
+    uint8_t         dismissCount;
+    uint16_t        trg_count;
+    uint16_t        literPerPulse;
+    uint32_t        value;
+    uint32_t        lastValue;
+    uint32_t        initValue;
+    MeasureEventMsg msg;
+    OAPC_I2C<>      oapc;
 
   public:
-    MeasureChannel () : Channel(), Alarm(0), dismissCount(0), value(0), lastValue(0), initValue(0), trg_count(0), literPerPulse(0), calibrationMode(false), oapcError(false), framError(false) {}
+    MeasureChannel () : Channel(), Alarm(0), calibrationMode(false), oapcError(false), framError(false), dismissCount(0), trg_count(0), literPerPulse(0), value(0), lastValue(0), initValue(0) {}
     virtual ~MeasureChannel () {}
 
     void setCountValue(uint32_t val) {
@@ -345,17 +349,21 @@ class MeasureChannel : public Channel<Hal, UList1, EmptyList, List4, PEERS_PER_C
       uint16_t oapcAnalogLowThreshold  = oapc.readAnalogLowThreshold();
       uint16_t oapcAnalogHighThreshold = oapc.readAnalogHighThreshold();
       uint16_t oapcPulseDelayMS        = oapc.readPulseDelayMS();
+      uint8_t  oapcChangeMode          = oapc.readChangeMode();
 
       uint16_t list1AnalogLowThreshold  = this->getList1().oapcAnalogLowThreshold();
       uint16_t list1AnalogHighThreshold = this->getList1().oapcAnalogHighThreshold();
       uint16_t list1PulseDelayMS        = this->getList1().oapcPulseDelayMS();
+      uint8_t  list1ChangeMode          = this->getList1().changeMode();
 
-      DPRINT("oapcAnalogLowThreshold  = "); DDECLN(oapcAnalogLowThreshold);
-      DPRINT("oapcAnalogHighThreshold = "); DDECLN(oapcAnalogHighThreshold);
-      DPRINT("oapcPulseDelayMS        = "); DDECLN(oapcPulseDelayMS);
+      DPRINT("oapcAnalogLowThreshold   = "); DDECLN(oapcAnalogLowThreshold);
+      DPRINT("oapcAnalogHighThreshold  = "); DDECLN(oapcAnalogHighThreshold);
+      DPRINT("oapcPulseDelayMS         = "); DDECLN(oapcPulseDelayMS);
+      DPRINT("oapcChangeMode           = "); DDECLN(oapcChangeMode);
       DPRINT("list1AnalogLowThreshold  = ");DDECLN(list1AnalogLowThreshold);
       DPRINT("list1AnalogHighThreshold = ");DDECLN(list1AnalogHighThreshold);
       DPRINT("list1PulseDelayMS        = ");DDECLN(list1PulseDelayMS);
+      DPRINT("list1ChangeMode          = ");DDECLN(list1ChangeMode);
 
 
       if (oapcAnalogLowThreshold != list1AnalogLowThreshold) {
@@ -371,6 +379,11 @@ class MeasureChannel : public Channel<Hal, UList1, EmptyList, List4, PEERS_PER_C
       if (oapcPulseDelayMS != list1PulseDelayMS) {
         bool ok = oapc.setPulseDelayMS(list1PulseDelayMS);
         DPRINT("set oapcPulseDelayMS to ");DDEC(list1PulseDelayMS); DPRINT(" is ");DDECLN(ok);
+      }
+
+      if (oapcChangeMode != list1ChangeMode) {
+        bool ok = oapc.setChangeMode(list1ChangeMode);
+        DPRINT("set oapcChangeMode to ");DDEC(list1ChangeMode); DPRINT(" is ");DDECLN(ok);
       }
 
       initValue = this->getList1().initialCountValue();
@@ -409,6 +422,7 @@ class UType : public MultiChannelDevice<Hal, MeasureChannel, 1, UList0> {
     virtual void configChanged () {
       TSDevice::configChanged();
       DPRINT(F("*txInterval: ")); DDECLN(this->getList0().txInterval());
+      DPRINT(F("*cyclicDisM: ")); DDECLN(this->getList0().cyclicInfoMsgDis());
     }
 };
 
@@ -439,7 +453,6 @@ public:
 ModeBtn modeBtn(Display, sdev);
 
 void setup() {
-  _delay_ms(500);
   DINIT(57600, ASKSIN_PLUS_PLUS_IDENTIFIER);
 
   uint8_t framInitResult = fram.init();
