@@ -12,6 +12,7 @@
 #define I2C_CMD_GET_ANALOG_HIGH_THRESHOLD    0x02
 #define I2C_CMD_GET_PULSE_DELAY_MS           0x03
 #define I2C_CMD_GET_CALIBRATIONMODE          0x04
+#define I2C_CMD_GET_CHANGEMODE                0x05
 #define I2C_CMD_GET_CURRENT_LDR_VALUE        0x20
 #define I2C_CMD_GET_COUNT_W_RESET            0x30
 #define I2C_CMD_GET_COUNT_WO_RESET           0x31
@@ -23,6 +24,9 @@
 #define I2C_CMD_SET_ANALOG_HIGH_THRESHOLD    0x42
 #define I2C_CMD_SET_PULSE_DELAY_MS           0x43
 #define I2C_CMD_SET_CALIBRATIONMODE          0x44
+#define I2C_CMD_SET_CHANGEMODE               0x45
+
+#define FIRMWARE_VERSION_MIN                 0xA0
 
 namespace as {
 
@@ -77,12 +81,22 @@ public:
   OAPC_I2C () : _present(false) {}
   ~OAPC_I2C () {}
 
-  bool init () {
+  bool init (uint8_t retries=6) {
     Wire.begin();
-    uint8_t version = readSingleByte(I2C_CMD_GET_VERSION);
-    DPRINT(F("OAPC Init: "));DHEXLN(version);
-    _present = (version >= 0xA0);
-    return _present;
+
+    while (retries > 0)  {
+      uint8_t version = readSingleByte(I2C_CMD_GET_VERSION);
+      if (version >= FIRMWARE_VERSION_MIN && version != 0xFF) {
+        _present = true;
+        DPRINT(F("OAPC Init: "));DHEXLN(version);
+        return _present;
+      }
+      DPRINTLN(F("OAPC init failed - try again..."));
+      _delay_ms(500);
+      retries--;
+    }
+    DPRINTLN(F("OAPC init failed - giving up."));
+    return false;
   }
 
   uint16_t readCountValue(bool wReset) {
@@ -113,6 +127,11 @@ public:
     return 0xFFFF;
   }
 
+  uint8_t readChangeMode() {
+    if (_present == true) { return readSingleByte(I2C_CMD_GET_CHANGEMODE); }
+    return 0xFF;
+  }
+
   uint16_t getCurrentLDRValue() {
     return (_present == true) ? readTwoBytes(I2C_CMD_GET_CURRENT_LDR_VALUE) : 0xFFFF;
   }
@@ -120,7 +139,6 @@ public:
   bool setAnalogLowThreshold(uint16_t val) {
     if (_present == true) {
       writeTwoBytes(I2C_CMD_SET_ANALOG_LOW_THRESHOLD, val);
-      readAnalogLowThreshold();
       return (val == readAnalogLowThreshold());
     }
     return false;
@@ -129,7 +147,6 @@ public:
   bool setAnalogHighThreshold(uint16_t val) {
     if (_present == true) {
       writeTwoBytes(I2C_CMD_SET_ANALOG_HIGH_THRESHOLD, val);
-      readAnalogHighThreshold();
       return (val == readAnalogHighThreshold());
     }
     return false;
@@ -138,8 +155,15 @@ public:
   bool setPulseDelayMS(uint16_t val) {
     if (_present == true) {
       writeTwoBytes(I2C_CMD_SET_PULSE_DELAY_MS, val);
-      readPulseDelayMS();
       return (val == readPulseDelayMS());
+    }
+    return false;
+  }
+
+  bool setChangeMode(uint8_t mode) {
+    if (_present == true) {
+      writeSingleByte(I2C_CMD_SET_CHANGEMODE, mode);
+      return (mode == readChangeMode());
     }
     return false;
   }
