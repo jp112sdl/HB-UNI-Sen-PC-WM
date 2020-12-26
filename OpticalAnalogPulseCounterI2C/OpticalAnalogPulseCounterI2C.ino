@@ -12,6 +12,7 @@
 #define I2C_CMD_GET_ANALOG_HIGH_THRESHOLD    0x02
 #define I2C_CMD_GET_PULSE_DELAY_MS           0x03
 #define I2C_CMD_GET_CALIBRATIONMODE          0x04
+#define I2C_CMD_GET_CHANGEMODE               0x05
 #define I2C_CMD_GET_CURRENT_LDR_VALUE        0x20
 #define I2C_CMD_GET_COUNT_W_RESET            0x30
 #define I2C_CMD_GET_COUNT_WO_RESET           0x31
@@ -23,6 +24,7 @@
 #define I2C_CMD_SET_ANALOG_HIGH_THRESHOLD    0x42
 #define I2C_CMD_SET_PULSE_DELAY_MS           0x43
 #define I2C_CMD_SET_CALIBRATIONMODE          0x44
+#define I2C_CMD_SET_CHANGEMODE               0x45
 
 #define LED_PIN                  LED_BUILTIN
 #define ANALOG_INPUT_PIN         A0
@@ -45,17 +47,24 @@ struct settings_t {
   uint16_t analogHighThreshold;
   uint16_t analogLowThreshold;
   uint16_t pulseDelayMilliSeconds;
+  uint8_t  changeMode;
 } settings;
 
 void readSettings() {
   eeprom_read_block((void*)&settings, (void*)0, sizeof(settings));
-  if ( (settings.analogHighThreshold == 0xffff) && (settings.analogLowThreshold == 0xffff) && (settings.pulseDelayMilliSeconds == 0xffff)) resetSettings();
+  if ( (settings.analogHighThreshold == 0xffff) || (settings.analogLowThreshold == 0xffff) || (settings.pulseDelayMilliSeconds == 0xffff) || (settings.changeMode == 0xff)) resetSettings();
+}
+
+void saveSettings() {
+  eeprom_write_block((const void*)&settings, (void*)0, sizeof(settings));
+  dumpSettings();
 }
 
 void dumpSettings() {
   Serial.print(F("analogHighThreshold    "));Serial.println(settings.analogHighThreshold);
   Serial.print(F("analogLowThreshold     "));Serial.println(settings.analogLowThreshold);
   Serial.print(F("pulseDelayMilliSeconds "));Serial.println(settings.pulseDelayMilliSeconds);
+  Serial.print(F("changeMode             "));Serial.println(settings.changeMode);
 }
 
 void resetSettings() {
@@ -63,8 +72,8 @@ void resetSettings() {
   settings.pulseDelayMilliSeconds = 500;
   settings.analogHighThreshold    = 900;
   settings.analogLowThreshold     = 100;
-  eeprom_write_block((const void*)&settings, (void*)0, sizeof(settings));
-  //dumpSettings();
+  settings.changeMode             = RISING;
+  saveSettings();
 }
 
 void onDataReceive(int numBytes) {
@@ -82,23 +91,24 @@ void onDataReceive(int numBytes) {
     case I2C_CMD_SET_ANALOG_LOW_THRESHOLD:
       settings.analogLowThreshold = (i2cReceiveBuffer[1] << 8);
       settings.analogLowThreshold += i2cReceiveBuffer[2];
-      eeprom_write_block((const void*)&settings, (void*)0, sizeof(settings));
-      dumpSettings();
+      saveSettings();
       break;
     case I2C_CMD_SET_ANALOG_HIGH_THRESHOLD:
       settings.analogHighThreshold = (i2cReceiveBuffer[1] << 8);
       settings.analogHighThreshold += i2cReceiveBuffer[2];
-      eeprom_write_block((const void*)&settings, (void*)0, sizeof(settings));
-      dumpSettings();
+      saveSettings();
       break;
     case I2C_CMD_SET_PULSE_DELAY_MS:
       settings.pulseDelayMilliSeconds = (i2cReceiveBuffer[1] << 8);
       settings.pulseDelayMilliSeconds += i2cReceiveBuffer[2];
-      eeprom_write_block((const void*)&settings, (void*)0, sizeof(settings));
-      dumpSettings();
+      saveSettings();
       break;
     case I2C_CMD_SET_CALIBRATIONMODE:
       calibrationMode = (i2cReceiveBuffer[1] == 1);
+      break;
+    case I2C_CMD_SET_CHANGEMODE:
+      settings.changeMode = i2cReceiveBuffer[1];
+      saveSettings();
       break;
     default:
       Serial.print("unknown command 0x");Serial.println(i2cRequestCommand, HEX);
@@ -124,6 +134,9 @@ void onDataRequest() {
       break;
     case I2C_CMD_GET_CALIBRATIONMODE:
       Wire.write((uint8_t)calibrationMode);
+      break;
+    case I2C_CMD_GET_CHANGEMODE:
+      Wire.write((uint8_t)settings.changeMode & 0xFF);
       break;
     case I2C_CMD_GET_CURRENT_LDR_VALUE:
       Wire.write(currentLDRValue >> 8 & 0xFF);
@@ -168,7 +181,7 @@ void setup() {
 
   readSettings();
 
-  //dumpSettings();
+  dumpSettings();
 
   Wire.onReceive(onDataReceive);
   Wire.onRequest(onDataRequest);
@@ -182,19 +195,22 @@ void loop() {
 
   if (LDRstate == HIGH) {
     if (oldPinState == LOW) {
-      if ((millis() - pulseDiffMillis > settings.pulseDelayMilliSeconds) ) {
-        if (calibrationMode == false)
-          countsSinceLastRequest++;
-        else
-          digitalWrite(LED_PIN, HIGH);
-      }
+
+      digitalWrite(LED_PIN, LOW);
+
+      if (calibrationMode == false && (settings.changeMode == RISING || settings.changeMode == CHANGE) && (millis() - pulseDiffMillis > settings.pulseDelayMilliSeconds) ) countsSinceLastRequest++;
+
       oldPinState = HIGH;
+      if (settings.changeMode == FALLING) pulseDiffMillis = millis();
     }
   } else {
     if (oldPinState == HIGH) {
-      digitalWrite(LED_PIN, LOW);
+      digitalWrite(LED_PIN, HIGH);
+
+      if (calibrationMode == false && (settings.changeMode == FALLING || settings.changeMode == CHANGE) && (millis() - pulseDiffMillis > settings.pulseDelayMilliSeconds) ) countsSinceLastRequest++;
+
       oldPinState = LOW;
-      pulseDiffMillis = millis();
+      if ((settings.changeMode == RISING || settings.changeMode == CHANGE)) pulseDiffMillis = millis();
     }
   }
 }
