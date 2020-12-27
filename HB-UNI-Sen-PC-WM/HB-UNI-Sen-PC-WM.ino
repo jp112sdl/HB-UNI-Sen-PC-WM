@@ -328,6 +328,7 @@ class MeasureChannel : public Channel<Hal, UList1, EmptyList, List4, PEERS_PER_C
           if (valueToSend != lastValue || dismissCount > cyclicInfoMsgDis) {
             msg.init(device().nextcount(), valueToSend);
             device().broadcastEvent(msg);
+            dismissCount = 0;
           }
 
           trg_count = 0;
