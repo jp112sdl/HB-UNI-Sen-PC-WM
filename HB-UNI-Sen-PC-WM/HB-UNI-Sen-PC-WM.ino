@@ -28,7 +28,7 @@
 #define TFT_DC             31 //PC3
 #define TFT_LED            32 //PC4
 
-#define TFT_BACKLIGHT_TIME 30
+#define TFT_BACKLIGHT_TIME 300
 #define DISPLAY_BGCOLOR    ST77XX_BLACK
 #define DISPLAY_ROTATE     3 // 0 = 0° , 1 = 90°, 2 = 180°, 3 = 270°
 #define DISPLAY_LINES      6
