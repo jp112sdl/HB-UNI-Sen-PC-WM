@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name Arduino_Pro_Mini)(type Legacy)(uri ${KIPRJMOD}/additional/Arduino_Pro_Mini.lib)(options "")(descr ""))
+)
