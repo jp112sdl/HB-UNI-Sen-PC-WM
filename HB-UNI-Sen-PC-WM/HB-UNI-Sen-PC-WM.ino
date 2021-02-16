@@ -16,6 +16,10 @@
 #include <Fonts/FreeMono9pt7b.h>
 #include "OAPC_I2C.h"
 
+// make compatible with v5.0.0
+#ifndef ASKSIN_PLUS_PLUS_VERSION_STR
+  #define ASKSIN_PLUS_PLUS_VERSION_STR ASKSIN_PLUS_PLUS_VERSION
+#endif
 
 #define CC1101_CS           8 //PB0
 #define CC1101_GDO0         6 //PE6 INT6
@@ -146,7 +150,7 @@ public:
     drawLine(1, clGREEN,  (char*)serial, true, false);
     drawLine(2, clWHITE,  F("--------------"), false, false);
     drawLine(3, clBLUE,   F("AskSinPP"), true, false);
-    drawLine(4, clYELLOW, F("V " ASKSIN_PLUS_PLUS_VERSION), true, false);
+    drawLine(4, clYELLOW, F("V " ASKSIN_PLUS_PLUS_VERSION_STR), true, false);
     drawLine(5, clWHITE,  F("--------------"), false, false);
     drawLine(6, clORANGE, F("Starting..."), true, false);
     screenNum = 0;
