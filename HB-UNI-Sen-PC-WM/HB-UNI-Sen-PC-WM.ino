@@ -3,6 +3,7 @@
 // 2016-10-31 papa Creative Commons - http://creativecommons.org/licenses/by-nc-sa/3.0/de/
 // 2020-12-23 jp112sdl Creative Commons - http://creativecommons.org/licenses/by-nc-sa/3.0/de/
 //- -----------------------------------------------------------------------------------------------------------------------
+// ci-test=yes board=mega128 aes=no
 
 #include <SPI.h>
 #include "FRAM_FM25040B_SPI.h"
