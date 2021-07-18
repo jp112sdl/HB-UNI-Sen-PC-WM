@@ -6,6 +6,7 @@
 // ci-test=yes board=mega128 aes=no
 
 #include <SPI.h>
+#include <Adafruit_SPIDevice.h>
 #include "FRAM_FM25040B_SPI.h"
 #include <AskSinPP.h>
 #include <MultiChannelDevice.h>
