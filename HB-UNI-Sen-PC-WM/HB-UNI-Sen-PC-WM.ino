@@ -6,15 +6,14 @@
 // ci-test=yes board=mega128 aes=no
 
 #include <SPI.h>
-#include <Adafruit_SPIDevice.h>
+#include <Adafruit_GFX.h>    // Core graphics library
+#include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
+#include <Fonts/FreeMono9pt7b.h>
 #include "FRAM_FM25040B_SPI.h"
 #include <AskSinPP.h>
 #include <MultiChannelDevice.h>
 #include <Register.h>
 #include <Button.h>
-#include <Adafruit_GFX.h>    // Core graphics library
-#include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
-#include <Fonts/FreeMono9pt7b.h>
 #include "OAPC_I2C.h"
 
 // make compatible with v5.0.0
