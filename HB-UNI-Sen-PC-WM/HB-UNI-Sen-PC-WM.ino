@@ -9,9 +9,6 @@
 #include <Adafruit_ST7735.h> // Hardware-specific library for ST7735
 #include <Fonts/FreeMono9pt7b.h>
 #include <Adafruit_SPIDevice.h>
-#if defined Adafruit_SPIDevice_h && !defined BitOrder
-  #define BitOrder BusIOBitOrder
-#endif
 
 #include <SPI.h>
 #include "FRAM_FM25040B_SPI.h"
